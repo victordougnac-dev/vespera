@@ -3817,24 +3817,280 @@ class Renderer {
     }
   }
 
+  getRockSurfaceY(x, baseY, seed = 0) {
+    // Multi-frequency smooth organic undulation: subtle enough for collision/foot alignment (±3px),
+    // but breaks up artificial flat horizontal lines with natural cavern contours.
+    const o1 = Math.sin((x + seed) * 0.024) * 2.3;
+    const o2 = Math.sin((x * 2.1 + seed * 3.1) * 0.057) * 1.4;
+    const o3 = Math.cos((x * 0.73 - seed) * 0.11) * 0.8;
+    return baseY + o1 + o2 + o3;
+  }
+
+  getBiomeStonePalette(biome) {
+    switch (biome.id) {
+      case 'crystals':
+        return {
+          base: '#221538',
+          body: '#352157',
+          light: '#5e3894',
+          highlight: 'rgba(217, 128, 250, 0.48)',
+          shadow: '#0d0717',
+          accent: '#d980fa',
+          pebble: '#4c2e7a'
+        };
+      case 'caverns':
+        return {
+          base: '#11211c',
+          body: '#1c362e',
+          light: '#33594d',
+          highlight: 'rgba(125, 240, 180, 0.38)',
+          shadow: '#08120f',
+          accent: '#56d38a',
+          pebble: '#27473d'
+        };
+      case 'tunnels':
+        return {
+          base: '#0d1d2b',
+          body: '#173045',
+          light: '#2d5473',
+          highlight: 'rgba(135, 225, 255, 0.42)',
+          shadow: '#060f17',
+          accent: '#5ce1e6',
+          pebble: '#21425e'
+        };
+      case 'village':
+        return {
+          base: '#1e202b',
+          body: '#2d3040',
+          light: '#4a4f66',
+          highlight: 'rgba(255, 210, 145, 0.36)',
+          shadow: '#0e1017',
+          accent: '#ffbe6b',
+          pebble: '#3b3f54'
+        };
+      case 'cathedral':
+        return {
+          base: '#162414',
+          body: '#263b22',
+          light: '#43613d',
+          highlight: 'rgba(185, 245, 145, 0.40)',
+          shadow: '#091208',
+          accent: '#8cf065',
+          pebble: '#334d2f'
+        };
+      case 'abyss':
+        return {
+          base: '#110d19',
+          body: '#1d1729',
+          light: '#342a47',
+          highlight: 'rgba(240, 105, 130, 0.38)',
+          shadow: '#06040a',
+          accent: '#e05368',
+          pebble: '#261f36'
+        };
+      case 'ruins':
+      default:
+        return {
+          base: '#181b26',
+          body: '#272c3d',
+          light: '#414961',
+          highlight: 'rgba(245, 195, 110, 0.36)',
+          shadow: '#0a0c12',
+          accent: '#f3a847',
+          pebble: '#32394d'
+        };
+    }
+  }
+
+  drawRockySurfaceStones(ctx, p, biome, time, seed = 0) {
+    if (p.w < 36) return;
+    ctx.save();
+
+    const palette = this.getBiomeStonePalette(biome);
+    const isGround = p.y >= 840 || (p.y >= 750 && p.w >= 260);
+
+    const hash = (n) => {
+      const v = Math.sin(n * 12.9898 + seed * 78.233) * 43758.5453;
+      return v - Math.floor(v);
+    };
+
+    const step = isGround ? 36 : 28;
+    let idx = 0;
+
+    for (let sx = p.x + 12; sx < p.x + p.w - 14; sx += step) {
+      idx++;
+      const rVal = hash(idx * 7.1 + sx * 0.13);
+      const sy = this.getRockSurfaceY(sx, p.y, seed);
+
+      if (rVal < 0.40) {
+        // --- 1. NATURAL FACETED BOULDER / STONE CRAG ---
+        const sw = isGround ? (16 + rVal * 28) : (12 + rVal * 18);
+        const sh = isGround ? (6 + rVal * 9) : (4.5 + rVal * 6.5);
+        const rLean = (hash(idx * 3.7) - 0.5) * sw * 0.35;
+        const peakX = sx + rLean;
+        const peakY = sy - sh;
+
+        // Base polygon (shadowed rock core)
+        ctx.fillStyle = palette.shadow;
+        ctx.beginPath();
+        ctx.moveTo(sx - sw * 0.52, sy + 1.5);
+        ctx.lineTo(sx - sw * 0.38, sy - sh * 0.55);
+        ctx.lineTo(peakX - sw * 0.08, peakY);
+        ctx.lineTo(peakX + sw * 0.12, peakY + 0.5);
+        ctx.lineTo(sx + sw * 0.42, sy - sh * 0.45);
+        ctx.lineTo(sx + sw * 0.52, sy + 1.5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Lit Left Stone Facet
+        ctx.fillStyle = palette.light;
+        ctx.beginPath();
+        ctx.moveTo(sx - sw * 0.52, sy + 1.5);
+        ctx.lineTo(sx - sw * 0.38, sy - sh * 0.55);
+        ctx.lineTo(peakX - sw * 0.08, peakY);
+        ctx.lineTo(sx + rLean * 0.3, sy + 1.5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Mid-tone Facet
+        ctx.fillStyle = palette.body;
+        ctx.beginPath();
+        ctx.moveTo(peakX - sw * 0.08, peakY);
+        ctx.lineTo(peakX + sw * 0.12, peakY + 0.5);
+        ctx.lineTo(sx + sw * 0.42, sy - sh * 0.45);
+        ctx.lineTo(sx + rLean * 0.3, sy + 1.5);
+        ctx.closePath();
+        ctx.fill();
+
+        // Top illuminated rim highlight
+        ctx.strokeStyle = palette.highlight;
+        ctx.lineWidth = 1.3;
+        ctx.beginPath();
+        ctx.moveTo(sx - sw * 0.45, sy - sh * 0.4);
+        ctx.lineTo(peakX - sw * 0.08, peakY);
+        ctx.lineTo(peakX + sw * 0.12, peakY + 0.5);
+        ctx.stroke();
+
+        // Natural rock fissure line
+        ctx.strokeStyle = palette.shadow;
+        ctx.lineWidth = 1.2;
+        ctx.beginPath();
+        ctx.moveTo(peakX, peakY + 1.5);
+        ctx.lineTo(peakX + (hash(idx * 5.3) - 0.5) * 6, sy - sh * 0.3);
+        ctx.lineTo(peakX + 2, sy + 1);
+        ctx.stroke();
+
+        // Biome-specific crystal shard or void fissure:
+        if (biome.id === 'crystals' && rVal < 0.22) {
+          const cFlicker = 0.75 + 0.25 * Math.sin(time * 3 + sx * 0.2);
+          ctx.fillStyle = `rgba(217, 128, 250, ${0.85 * cFlicker})`;
+          ctx.beginPath();
+          ctx.moveTo(peakX - 3, peakY + 1);
+          ctx.lineTo(peakX, peakY - 6);
+          ctx.lineTo(peakX + 2.5, peakY + 0.5);
+          ctx.closePath();
+          ctx.fill();
+        } else if (biome.id === 'abyss' && rVal < 0.2) {
+          ctx.strokeStyle = 'rgba(224, 83, 104, 0.75)';
+          ctx.lineWidth = 1.2;
+          ctx.beginPath();
+          ctx.moveTo(peakX - 2, peakY + 2);
+          ctx.lineTo(peakX + 1, sy - 1);
+          ctx.stroke();
+        }
+
+      } else if (rVal < 0.74) {
+        // --- 2. SMOOTH WEATHERED PEBBLE / RIVER STONE ---
+        const pw = 7 + rVal * 8;
+        const ph = 3.5 + rVal * 4;
+        const rot = (hash(idx * 4.9) - 0.5) * 0.32;
+
+        ctx.save();
+        ctx.translate(sx, sy);
+        ctx.rotate(rot);
+
+        // Pebble body
+        ctx.fillStyle = palette.pebble;
+        ctx.beginPath();
+        ctx.ellipse(0, 0, pw * 0.5, ph * 0.5, 0, 0, Math.PI * 2);
+        ctx.fill();
+
+        // Top specular rim
+        ctx.strokeStyle = palette.highlight;
+        ctx.lineWidth = 1.0;
+        ctx.beginPath();
+        ctx.arc(0, 0, pw * 0.44, Math.PI * 1.1, Math.PI * 1.9);
+        ctx.stroke();
+
+        // Contact shadow
+        ctx.fillStyle = palette.shadow;
+        ctx.beginPath();
+        ctx.ellipse(0, ph * 0.35, pw * 0.38, ph * 0.2, 0, 0, Math.PI);
+        ctx.fill();
+
+        ctx.restore();
+
+        // Tiny stone chips beside the pebble
+        if (rVal < 0.54) {
+          ctx.fillStyle = palette.body;
+          ctx.beginPath();
+          ctx.arc(sx + pw * 0.7, sy + 0.5, 1.6, 0, Math.PI * 2);
+          ctx.arc(sx - pw * 0.65, sy + 1.0, 1.2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+
+      } else if (rVal < 0.92 && isGround) {
+        // --- 3. EMBEDDED SLATE STEP / HORIZONTAL BEDROCK SLAB ---
+        const bw = 24 + rVal * 20;
+        const bh = 4.5 + rVal * 3;
+        ctx.fillStyle = palette.body;
+        ctx.beginPath();
+        ctx.roundRect(sx - bw * 0.5, sy - bh * 0.5, bw, bh, 2.5);
+        ctx.fill();
+
+        // Chiseled top edge
+        ctx.strokeStyle = palette.light;
+        ctx.lineWidth = 1.1;
+        ctx.beginPath();
+        ctx.moveTo(sx - bw * 0.46, sy - bh * 0.5);
+        ctx.lineTo(sx + bw * 0.46, sy - bh * 0.5);
+        ctx.stroke();
+
+        // Crevice mortar seam
+        ctx.strokeStyle = palette.shadow;
+        ctx.lineWidth = 1.4;
+        ctx.beginPath();
+        ctx.moveTo(sx - bw * 0.48, sy + bh * 0.5);
+        ctx.lineTo(sx + bw * 0.48, sy + bh * 0.5);
+        ctx.stroke();
+      }
+    }
+
+    ctx.restore();
+  }
+
   drawPlatforms(ctx, room, biome, game, time) {
     const solids = game.getSolidPlatforms();
 
     for (const p of solids) {
       ctx.save();
+      const seed = Math.floor(p.x * 37 + p.y * 101);
 
       const isFloatingSlab = p.h <= 48 && p.y < 840 && !p.isBridge && p.w >= 45;
 
       if (isFloatingSlab) {
-        // SCULPTED FLOATING ROCK ISLAND (Tapered Craggy Underside + Chiseled Facets + Hanging Roots)
+        // SCULPTED FLOATING ROCK ISLAND (Tapered Craggy Underside + Natural Uneven Top + Embedded Stones)
         const extraDepth = Math.min(34, Math.max(18, p.w * 0.14));
         const bottomY = p.y + p.h + extraDepth;
 
-        // 1. Deep Craggy Shadow Silhouette
+        // 1. Deep Craggy Shadow Silhouette with Natural Undulating Top Surface
         ctx.fillStyle = '#090c12';
         ctx.beginPath();
-        ctx.moveTo(p.x - 5, p.y + 4);
-        ctx.lineTo(p.x + p.w + 5, p.y + 4);
+        ctx.moveTo(p.x - 5, this.getRockSurfaceY(p.x - 5, p.y, seed) + 4);
+        for (let sx = p.x; sx <= p.x + p.w; sx += 14) {
+          ctx.lineTo(sx, this.getRockSurfaceY(sx, p.y, seed) + 3);
+        }
+        ctx.lineTo(p.x + p.w + 5, this.getRockSurfaceY(p.x + p.w + 5, p.y, seed) + 4);
         ctx.lineTo(p.x + p.w - 4, p.y + p.h * 0.75);
         ctx.lineTo(p.x + p.w * 0.82, bottomY - 4);
         ctx.lineTo(p.x + p.w * 0.54, bottomY + 3);
@@ -3843,15 +4099,18 @@ class Renderer {
         ctx.closePath();
         ctx.fill();
 
-        // 2. Mid-tone Chiseled 3D Rock Facets
+        // 2. Mid-tone Chiseled 3D Rock Facets with Natural Undulating Top
         const rockGrad = ctx.createLinearGradient(p.x, p.y, p.x, bottomY);
         rockGrad.addColorStop(0, '#2d3746');
         rockGrad.addColorStop(0.38, '#1b222e');
         rockGrad.addColorStop(1, '#0b0e15');
         ctx.fillStyle = rockGrad;
         ctx.beginPath();
-        ctx.moveTo(p.x - 3, p.y + 3);
-        ctx.lineTo(p.x + p.w + 3, p.y + 3);
+        ctx.moveTo(p.x - 3, this.getRockSurfaceY(p.x - 3, p.y, seed) + 3);
+        for (let sx = p.x; sx <= p.x + p.w; sx += 14) {
+          ctx.lineTo(sx, this.getRockSurfaceY(sx, p.y, seed) + 2.5);
+        }
+        ctx.lineTo(p.x + p.w + 3, this.getRockSurfaceY(p.x + p.w + 3, p.y, seed) + 3);
         ctx.lineTo(p.x + p.w - 8, p.y + p.h);
         ctx.lineTo(p.x + p.w * 0.68, bottomY - 5);
         ctx.lineTo(p.x + p.w * 0.35, bottomY - 3);
@@ -3859,21 +4118,22 @@ class Renderer {
         ctx.closePath();
         ctx.fill();
 
-        // 3. Upper Chiseled Stone Bevel Blocks
-        for (let bx = p.x; bx < p.x + p.w - 14; bx += 36) {
-          const bw = Math.min(34, p.x + p.w - bx);
-          const bh = 11 + ((bx * 13) % 8);
-          ctx.fillStyle = (bx % 72 === 0) ? '#323d4d' : '#26303d';
+        // 3. Upper Chiseled Stone Bevel Blocks sitting along the natural undulating surface
+        for (let bx = p.x; bx < p.x + p.w - 14; bx += 34) {
+          const bw = Math.min(32, p.x + p.w - bx);
+          const blockTopY = this.getRockSurfaceY(bx + bw * 0.5, p.y, seed) + 2;
+          const bh = 10 + ((bx * 13) % 7);
+          ctx.fillStyle = (bx % 68 === 0) ? '#323d4d' : '#26303d';
           ctx.beginPath();
-          ctx.roundRect(bx + 1, p.y + 3, bw - 2, bh, 3);
+          ctx.roundRect(bx + 1, blockTopY, bw - 2, bh, 3);
           ctx.fill();
 
           // Warm/cool top rim highlight on stone block
           ctx.strokeStyle = 'rgba(165, 195, 215, 0.28)';
           ctx.lineWidth = 1.2;
           ctx.beginPath();
-          ctx.moveTo(bx + 3, p.y + 4);
-          ctx.lineTo(bx + bw - 3, p.y + 4);
+          ctx.moveTo(bx + 3, blockTopY + 1);
+          ctx.lineTo(bx + bw - 3, blockTopY + 1);
           ctx.stroke();
         }
 
@@ -3881,9 +4141,10 @@ class Renderer {
         ctx.strokeStyle = '#07090e';
         ctx.lineWidth = 1.8;
         for (let cx = p.x + 28; cx < p.x + p.w - 24; cx += 52) {
+          const cyTop = this.getRockSurfaceY(cx, p.y, seed) + 4;
           ctx.beginPath();
-          ctx.moveTo(cx, p.y + 6);
-          ctx.lineTo(cx - 6, p.y + 18);
+          ctx.moveTo(cx, cyTop);
+          ctx.lineTo(cx - 6, cyTop + 12);
           ctx.lineTo(cx + 4, p.y + p.h + 6);
           ctx.stroke();
         }
@@ -3908,8 +4169,11 @@ class Renderer {
           }
         }
 
-        // 6. Lush Painterly Moss Cushion along Top Surface
-        this.drawPainterlyMossTop(ctx, p.x - 2, p.y, p.w + 4, biome, time);
+        // 6. Natural Embedded Stones & Pebbles along Top
+        this.drawRockySurfaceStones(ctx, p, biome, time, seed);
+
+        // 7. Lush Painterly Moss Cushion hugging the surface
+        this.drawPainterlyMossTop(ctx, p.x - 2, p.y, p.w + 4, biome, time, seed);
 
       } else if (p.isBridge) {
         // Wooden Suspension Bridge Planks & Cables
@@ -3922,13 +4186,59 @@ class Renderer {
           ctx.fill();
         }
       } else {
-        // SCULPTED 3D CLIFF WALLS, PILLARS & GROUND STRATA
+        // SCULPTED 3D CLIFF WALLS, PILLARS & NATURAL GROUND STRATA
+        const isGroundOrFloor = p.y >= 840 || (p.y >= 750 && p.w >= 260);
+        const hasTopSurface = !p.oneWay && p.w >= 36 && p.y > 40;
+
         const baseGrad = ctx.createLinearGradient(p.x, p.y, p.x + p.w, p.y + p.h);
         baseGrad.addColorStop(0, '#1a222e');
         baseGrad.addColorStop(0.5, '#111721');
         baseGrad.addColorStop(1, '#080b10');
         ctx.fillStyle = baseGrad;
-        ctx.fillRect(p.x, p.y, p.w, p.h);
+
+        if (hasTopSurface) {
+          // Natural undulating rock contour on top of ground and ledges
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y + p.h);
+          ctx.lineTo(p.x, this.getRockSurfaceY(p.x, p.y, seed));
+          for (let sx = p.x; sx <= p.x + p.w; sx += 14) {
+            ctx.lineTo(sx, this.getRockSurfaceY(sx, p.y, seed));
+          }
+          ctx.lineTo(p.x + p.w, p.y + p.h);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillRect(p.x, p.y, p.w, p.h);
+        }
+
+        // Subterranean Bedrock Layers & Geological Strata (Wavy sediment veins)
+        if (isGroundOrFloor && p.h >= 50) {
+          ctx.save();
+          for (let layerY of [p.y + 22, p.y + 44, p.y + 68]) {
+            if (layerY > p.y + p.h - 8) continue;
+            ctx.strokeStyle = 'rgba(7, 10, 16, 0.65)';
+            ctx.lineWidth = 2.2;
+            ctx.beginPath();
+            ctx.moveTo(p.x, layerY);
+            for (let lx = p.x + 20; lx <= p.x + p.w; lx += 28) {
+              const wave = Math.sin((lx + seed) * 0.04) * 3 + Math.cos(lx * 0.08) * 1.5;
+              ctx.lineTo(lx, layerY + wave);
+            }
+            ctx.stroke();
+
+            // Subtle mineral highlight on top edge of strata wave
+            ctx.strokeStyle = 'rgba(120, 150, 180, 0.12)';
+            ctx.lineWidth = 1.0;
+            ctx.beginPath();
+            ctx.moveTo(p.x, layerY - 1.5);
+            for (let lx = p.x + 20; lx <= p.x + p.w; lx += 28) {
+              const wave = Math.sin((lx + seed) * 0.04) * 3 + Math.cos(lx * 0.08) * 1.5;
+              ctx.lineTo(lx, layerY + wave - 1.5);
+            }
+            ctx.stroke();
+          }
+          ctx.restore();
+        }
 
         // Chiseled 3D Rock Boulders along the edges & face
         const blockH = 28;
@@ -3940,7 +4250,6 @@ class Renderer {
             const ch = Math.min(blockH - 2, p.y + p.h - by);
             if (cw < 8 || ch < 8) continue;
 
-            // Only draw detailed blocks near top or left/right cliff faces for performance & beauty
             const isNearEdge = (by - p.y < 64) || (bx - p.x < 56) || (p.x + p.w - bx < 68);
             if (!isNearEdge) continue;
 
@@ -3967,7 +4276,6 @@ class Renderer {
 
         // Climbing Woody Vines, Leaf Clusters & Shelf Mushrooms on Tall Cliffs/Pillars
         if (p.h >= 80) {
-          // Left & right cliff vines
           for (const side of [0, 1]) {
             const vx = side === 0 ? p.x + 6 : p.x + p.w - 6;
             ctx.strokeStyle = '#1f3622';
@@ -4004,8 +4312,11 @@ class Renderer {
           }
         }
 
-        // Lush Painterly Moss Carpet on Top Ledge
-        this.drawPainterlyMossTop(ctx, p.x, p.y, p.w, biome, time);
+        // Draw Embedded Rocks, Boulders, Pebbles & Stone Slabs on top
+        if (hasTopSurface) {
+          this.drawRockySurfaceStones(ctx, p, biome, time, seed);
+          this.drawPainterlyMossTop(ctx, p.x, p.y, p.w, biome, time, seed);
+        }
       }
 
       ctx.restore();
@@ -4068,42 +4379,108 @@ class Renderer {
     }
   }
 
-  drawPainterlyMossTop(ctx, x, y, w, biome, time) {
+  drawPainterlyMossTop(ctx, x, y, w, biome, time, seed = 0) {
     ctx.save();
-    const isCrystal = biome.id === 'crystals';
-    const baseMoss = isCrystal ? '#3a2859' : '#264723';
-    const midMoss = isCrystal ? '#643d96' : '#467d34';
-    const brightMoss = isCrystal ? '#a76eff' : '#7ec449';
+    
+    // Biome-specific vegetation & lichen palettes
+    let baseMoss, midMoss, brightMoss, sporeAccent;
+    switch (biome.id) {
+      case 'crystals':
+        baseMoss = '#2f1e4a';
+        midMoss = '#593485';
+        brightMoss = '#9e62f5';
+        sporeAccent = '#d980fa';
+        break;
+      case 'caverns':
+        baseMoss = '#12261a';
+        midMoss = '#235932';
+        brightMoss = '#4fc46b';
+        sporeAccent = '#7df09c';
+        break;
+      case 'tunnels':
+        baseMoss = '#0d2229';
+        midMoss = '#1d4852';
+        brightMoss = '#459ba8';
+        sporeAccent = '#70e5f2';
+        break;
+      case 'village':
+        baseMoss = '#26221c';
+        midMoss = '#4a4030';
+        brightMoss = '#8a7752';
+        sporeAccent = '#e8b868';
+        break;
+      case 'cathedral':
+        baseMoss = '#1a2916';
+        midMoss = '#375727';
+        brightMoss = '#72ad47';
+        sporeAccent = '#b3f277';
+        break;
+      case 'abyss':
+        baseMoss = '#1c0c16';
+        midMoss = '#3b1424';
+        brightMoss = '#782343';
+        sporeAccent = '#e05368';
+        break;
+      case 'ruins':
+      default:
+        baseMoss = '#1e222a';
+        midMoss = '#363d4e';
+        brightMoss = '#6b7999';
+        sporeAccent = '#f3a847';
+        break;
+    }
 
-    // 1. Deep Moss Cushion Pillows
+    // 1. Deep Moss Cushion Pillows hugging the undulating rock surface
     ctx.fillStyle = baseMoss;
-    for (let mx = x + 4; mx < x + w - 4; mx += 18) {
+    for (let mx = x + 4; mx < x + w - 4; mx += 16) {
       const mw = Math.min(22, x + w - mx);
       const mh = 5 + ((mx * 7) % 4);
+      const sy = this.getRockSurfaceY(mx + mw * 0.5, y, seed);
       ctx.beginPath();
-      ctx.ellipse(mx + mw * 0.5, y + 2, mw * 0.55, mh * 0.6, 0, 0, Math.PI * 2);
+      ctx.ellipse(mx + mw * 0.5, sy + 2, mw * 0.55, mh * 0.6, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 2. Mid-tone Lush Moss Layer
+    // 2. Mid-tone Lush Moss Layer hugging the surface
     ctx.fillStyle = midMoss;
-    for (let mx = x + 6; mx < x + w - 6; mx += 16) {
+    for (let mx = x + 6; mx < x + w - 6; mx += 15) {
       const mw = Math.min(18, x + w - mx);
+      const sy = this.getRockSurfaceY(mx + mw * 0.5, y, seed);
       ctx.beginPath();
-      ctx.ellipse(mx + mw * 0.5, y + 0.5, mw * 0.5, 3.2, 0, 0, Math.PI * 2);
+      ctx.ellipse(mx + mw * 0.5, sy + 0.5, mw * 0.5, 3.2, 0, 0, Math.PI * 2);
       ctx.fill();
     }
 
-    // 3. Rim-Lit Top Moss Highlights & Grass Blades
+    // 3. Rim-Lit Top Moss Highlights & Swaying Grass / Spore Filaments
     ctx.fillStyle = brightMoss;
-    for (let gx = x + 5; gx < x + w - 5; gx += 9) {
+    for (let gx = x + 5; gx < x + w - 5; gx += 8) {
+      // Create organic patchiness: skip some spots so moss clumps naturally around stones
+      if ((gx * 17 + seed) % 7 === 0) continue;
+      const sy = this.getRockSurfaceY(gx, y, seed);
       const bladeH = 3 + Math.sin(gx * 0.4 + time * 2) * 1.8;
+      const sway = Math.sin(time * 2.2 + gx * 0.12) * 1.3;
       ctx.beginPath();
-      ctx.moveTo(gx - 1.5, y + 1);
-      ctx.lineTo(gx + Math.sin(time * 2.2 + gx) * 1.2, y - bladeH);
-      ctx.lineTo(gx + 1.5, y + 1);
+      ctx.moveTo(gx - 1.5, sy + 1);
+      ctx.lineTo(gx + sway, sy - bladeH);
+      ctx.lineTo(gx + 1.5, sy + 1);
       ctx.closePath();
       ctx.fill();
+    }
+
+    // 4. Subtle Bioluminescent Spore / Dew Drops in cavernous & crystalline biomes
+    if (biome.id === 'caverns' || biome.id === 'crystals' || biome.id === 'tunnels') {
+      for (let sx = x + 10; sx < x + w - 10; sx += 32) {
+        if ((sx * 13) % 5 === 0) {
+          const sy = this.getRockSurfaceY(sx, y, seed);
+          const glow = 0.5 + 0.5 * Math.sin(time * 2.8 + sx);
+          ctx.fillStyle = sporeAccent;
+          ctx.globalAlpha = glow * 0.75;
+          ctx.beginPath();
+          ctx.arc(sx, sy - 2.5, 1.4, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.globalAlpha = 1.0;
+        }
+      }
     }
 
     ctx.restore();
