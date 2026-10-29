@@ -1,4 +1,4 @@
-(() => {
+﻿(() => {
 "use strict";
 
 // === FILE: src/audio.js ===
